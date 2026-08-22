@@ -1,0 +1,9 @@
+{
+  "id": "lifeflow",
+  "name": "زندگی‌آرام (LifeFlow)",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "مدیریت تسک، برنامه‌ریزی روزانه، مطالعه، ورزش، یادگیری و یادداشت — با تقویم جلالی، پومودورو و بکاپ کامل، مستقیم داخل ولت.",
+  "author": "Mohammadhosein",
+  "isDesktopOnly": false
+}
