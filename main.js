@@ -23789,37 +23789,6 @@ function CalendarHeader({ view, cursor, onPrev, onNext, onToday, onView }) {
   }
   return /* @__PURE__ */ React.createElement(GlassCard, { className: "p-3 flex items-center justify-between flex-wrap gap-2" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-1.5" }, /* @__PURE__ */ React.createElement("button", { onClick: onPrev, className: "w-8 h-8 rounded-lg bg-white/[0.06] flex items-center justify-center" }, /* @__PURE__ */ React.createElement(Ic, { name: "chevron-right", size: 15 })), /* @__PURE__ */ React.createElement("button", { onClick: onToday, className: "px-3 h-8 rounded-lg bg-white/[0.06] text-xs text-slate-300 font-medium" }, "\u0627\u0645\u0631\u0648\u0632"), /* @__PURE__ */ React.createElement("button", { onClick: onNext, className: "w-8 h-8 rounded-lg bg-white/[0.06] flex items-center justify-center" }, /* @__PURE__ */ React.createElement(Ic, { name: "chevron-left", size: 15 }))), /* @__PURE__ */ React.createElement("p", { className: "text-sm font-bold text-slate-100" }, title), /* @__PURE__ */ React.createElement("div", { className: "flex bg-white/[0.05] border border-white/10 rounded-xl p-0.5" }, [["day", "\u0631\u0648\u0632"], ["week", "\u0647\u0641\u062A\u0647"], ["month", "\u0645\u0627\u0647"], ["year", "\u0633\u0627\u0644"]].map(([v, l]) => /* @__PURE__ */ React.createElement("button", { key: v, onClick: () => onView(v), className: `px-2.5 py-1.5 rounded-lg text-[11px] font-medium ${view === v ? "bg-white/10 text-white" : "text-slate-400"}` }, l))));
 }
-function ResizeHandle({ startDuration, rowH, onResize, onResizeEnd }) {
-  const dragState = useRef(null);
-  const onPointerDown = (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    dragState.current = { startY: e.clientY, startDuration };
-    const onMove = (ev) => {
-      if (!dragState.current) return;
-      const deltaMin = Math.round((ev.clientY - dragState.current.startY) / rowH * 30 / 5) * 5;
-      onResize(Math.max(5, dragState.current.startDuration + deltaMin));
-    };
-    const onUp = () => {
-      dragState.current = null;
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-      onResizeEnd();
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  };
-  return /* @__PURE__ */ React.createElement(
-    "div",
-    {
-      onMouseDown: onPointerDown,
-      draggable: false,
-      className: "absolute left-0 right-0 bottom-0 h-2 cursor-ns-resize flex items-center justify-center",
-      style: { touchAction: "none" }
-    },
-    /* @__PURE__ */ React.createElement("div", { className: "w-6 h-0.5 rounded-full bg-white/40" })
-  );
-}
 function DayPlannerView({ cursor, tasks, onSchedule, onToggle, onDelete, onEdit }) {
   const dayTasks = tasks.filter((tsk) => isTaskDueOn(tsk, cursor));
   const unscheduled = dayTasks.filter((tsk) => !tsk.time);
@@ -23827,13 +23796,60 @@ function DayPlannerView({ cursor, tasks, onSchedule, onToggle, onDelete, onEdit 
   const rowH = 26;
   const topFor = (hhmm) => (timeToMinutes(hhmm) - 360) / 30 * rowH;
   const [dragId, setDragId] = useState(null);
-  const [liveDurations, setLiveDurations] = useState({});
+  const [livePreview, setLivePreview] = useState({});
   const dropAt = (mins) => {
     if (dragId == null) return;
     const tsk = tasks.find((x) => String(x.id) === String(dragId));
     if (!tsk) return;
     onSchedule(tsk.id, minutesToHHMM(Math.max(360, Math.min(1410, mins))), tsk.duration || 45);
     setDragId(null);
+  };
+  const startMove = (e, tsk) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const startY = e.clientY;
+    const startMins = timeToMinutes(tsk.time);
+    const onMove = (ev) => {
+      const deltaMin = Math.round((ev.clientY - startY) / rowH * 30 / 5) * 5;
+      const newMins = Math.max(360, Math.min(1410, startMins + deltaMin));
+      setLivePreview((p) => ({ ...p, [tsk.id]: { time: minutesToHHMM(newMins), duration: tsk.duration } }));
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      setLivePreview((p) => {
+        const preview = p[tsk.id];
+        if (preview) onSchedule(tsk.id, preview.time, preview.duration);
+        const { [tsk.id]: _drop, ...rest } = p;
+        return rest;
+      });
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+  const startResize = (e, tsk) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const startY = e.clientY;
+    const startDuration = tsk.duration;
+    const onMove = (ev) => {
+      const deltaMin = Math.round((ev.clientY - startY) / rowH * 30 / 5) * 5;
+      const newDuration = Math.max(5, startDuration + deltaMin);
+      setLivePreview((p) => ({ ...p, [tsk.id]: { time: tsk.time, duration: newDuration } }));
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      setLivePreview((p) => {
+        const preview = p[tsk.id];
+        if (preview) onSchedule(tsk.id, preview.time, preview.duration);
+        const { [tsk.id]: _drop, ...rest } = p;
+        return rest;
+      });
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
   };
   return /* @__PURE__ */ React.createElement("div", { className: "space-y-3" }, unscheduled.length > 0 && /* @__PURE__ */ React.createElement(GlassCard, { className: "p-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-[11px] text-slate-400 mb-2" }, "\u062A\u0633\u06A9\u200C\u0647\u0627\u06CC \u0628\u0631\u0646\u0627\u0645\u0647\u200C\u0631\u06CC\u0632\u06CC\u200C\u0646\u0634\u062F\u0647 \u2014 \u0628\u06A9\u0634 \u0648 \u0631\u0648\u06CC \u0633\u0627\u0639\u062A \u0645\u0648\u0631\u062F\u0646\u0638\u0631 \u0631\u0647\u0627 \u06A9\u0646"), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-1.5" }, unscheduled.map((tsk) => {
     const q = QUADRANTS.find((x) => x.id === tsk.quad) || QUADRANTS[1];
@@ -23850,7 +23866,7 @@ function DayPlannerView({ cursor, tasks, onSchedule, onToggle, onDelete, onEdit 
       },
       tsk.title
     );
-  }))), /* @__PURE__ */ React.createElement(GlassCard, { className: "p-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-[10px] text-slate-500 mb-2" }, "\u0644\u0628\u0647\u200C\u06CC \u067E\u0627\u06CC\u06CC\u0646 \u0647\u0631 \u0628\u0644\u0648\u06A9 \u0631\u0648 \u0628\u06A9\u0634 \u062A\u0627 \u0645\u062F\u062A\u0634 \u0632\u06CC\u0627\u062F \u06CC\u0627 \u06A9\u0645 \u0628\u0634\u0647 (\u0647\u0631 \u0645\u0642\u062F\u0627\u0631\u06CC\u060C \u0628\u06CC\u0634\u062A\u0631 \u0627\u0632 \u06CC\u06A9 \u0633\u0627\u0639\u062A \u0647\u0645 \u0645\u06CC\u200C\u0634\u0647)"), /* @__PURE__ */ React.createElement("div", { className: "relative", style: { height: CAL_HOURS.length * rowH }, onDragOver: (e) => e.preventDefault() }, CAL_HOURS.map((mins) => /* @__PURE__ */ React.createElement(
+  }))), /* @__PURE__ */ React.createElement(GlassCard, { className: "p-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-[10px] text-slate-500 mb-2" }, "\u0648\u0633\u0637 \u0628\u0644\u0648\u06A9 \u0631\u0648 \u0628\u06A9\u0634 \u0628\u0631\u0627\u06CC \u062C\u0627\u0628\u0647\u200C\u062C\u0627\u06CC\u06CC\u061B \u0644\u0628\u0647\u200C\u06CC \u067E\u0627\u06CC\u06CC\u0646\u0634 \u0631\u0648 \u0628\u06A9\u0634 \u0628\u0631\u0627\u06CC \u062A\u063A\u06CC\u06CC\u0631 \u0645\u062F\u062A \u2014 \u0647\u0631 \u0645\u0642\u062F\u0627\u0631\u06CC\u060C \u062D\u062A\u06CC \u0628\u06CC\u0634\u062A\u0631 \u0627\u0632 \u06CC\u06A9 \u0633\u0627\u0639\u062A"), /* @__PURE__ */ React.createElement("div", { className: "relative", style: { height: CAL_HOURS.length * rowH }, onDragOver: (e) => e.preventDefault() }, CAL_HOURS.map((mins) => /* @__PURE__ */ React.createElement(
     "div",
     {
       key: mins,
@@ -23863,34 +23879,29 @@ function DayPlannerView({ cursor, tasks, onSchedule, onToggle, onDelete, onEdit 
     /* @__PURE__ */ React.createElement("div", { className: "flex-1 border-t border-white/[0.04]", style: { marginRight: mins % 60 === 0 ? 0 : 44 } })
   )), scheduled.map((tsk) => {
     const q = QUADRANTS.find((x) => x.id === tsk.quad) || QUADRANTS[1];
-    const liveDur = liveDurations[tsk.id] ?? tsk.duration;
+    const preview = livePreview[tsk.id];
+    const liveTime = preview ? preview.time : tsk.time;
+    const liveDur = preview ? preview.duration : tsk.duration;
     const h = Math.max(liveDur / 30 * rowH, rowH * 0.7);
     return /* @__PURE__ */ React.createElement(
       "div",
       {
         key: tsk.id,
-        draggable: true,
-        onDragStart: () => setDragId(tsk.id),
-        onDragEnd: () => setDragId(null),
+        onMouseDown: (e) => startMove(e, tsk),
         onClick: () => onEdit(tsk),
-        className: "absolute right-1 rounded-lg px-2 py-1 overflow-hidden cursor-grab active:cursor-grabbing group",
-        style: { top: topFor(tsk.time), height: h, left: 46, background: `${q.color}22`, borderRight: `3px solid ${q.color}`, opacity: tsk.status === "done" ? 0.5 : 1 }
+        className: "absolute right-1 rounded-lg px-2 py-1 overflow-hidden cursor-grab active:cursor-grabbing group select-none",
+        style: { top: topFor(liveTime), height: h, left: 46, background: `${q.color}22`, borderRight: `3px solid ${q.color}`, opacity: tsk.status === "done" ? 0.5 : 1, userSelect: "none" }
       },
       /* @__PURE__ */ React.createElement("p", { className: `text-[10px] font-medium truncate ${tsk.status === "done" ? "line-through" : ""}`, style: { color: q.color } }, tsk.title),
-      /* @__PURE__ */ React.createElement("p", { className: "text-[9px] text-slate-400" }, tsk.time, " \xB7 ", liveDur, "\u062F", liveDur > 60 ? ` (${Math.floor(liveDur / 60)}\u0633\u0627\u0639\u062A${liveDur % 60 ? ` ${liveDur % 60}\u062F` : ""})` : ""),
+      /* @__PURE__ */ React.createElement("p", { className: "text-[9px] text-slate-400" }, liveTime, " \xB7 ", liveDur, "\u062F", liveDur > 60 ? ` (${Math.floor(liveDur / 60)}\u0633\u0627\u0639\u062A${liveDur % 60 ? ` ${liveDur % 60}\u062F` : ""})` : ""),
       /* @__PURE__ */ React.createElement(
-        ResizeHandle,
+        "div",
         {
-          rowH,
-          startDuration: tsk.duration,
-          onResize: (d) => setLiveDurations((p) => ({ ...p, [tsk.id]: d })),
-          onResizeEnd: () => setLiveDurations((p) => {
-            const d = liveDurations[tsk.id];
-            if (d) onSchedule(tsk.id, tsk.time, d);
-            const { [tsk.id]: _drop, ...rest } = p;
-            return rest;
-          })
-        }
+          onMouseDown: (e) => startResize(e, tsk),
+          className: "absolute left-0 right-0 bottom-0 h-2.5 cursor-ns-resize flex items-center justify-center",
+          style: { touchAction: "none" }
+        },
+        /* @__PURE__ */ React.createElement("div", { className: "w-6 h-0.5 rounded-full bg-white/40" })
       )
     );
   }))));
